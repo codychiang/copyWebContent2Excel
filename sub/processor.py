@@ -47,24 +47,21 @@ class ExcelProcessor(threading.Thread):
                 self._status_cb("沒有需要處理的列")
                 return
 
-            try:
-                with BrowserSession() as session:
-                    for row_num, url in rows:
-                        if self._stop_event.is_set():
+            with BrowserSession() as session:
+                for row_num, url in rows:
+                    if self._stop_event.is_set():
+                        break
+                    self._progress_cb(row_num, url)
+                    text = None
+                    for attempt in range(1, 4):
+                        try:
+                            text = session.fetch_text(url)
                             break
-                        self._progress_cb(row_num, url)
-                        text = None
-                        for attempt in range(1, 4):
-                            try:
-                                text = session.fetch_text(url)
-                                break
-                            except Exception as e:
-                                if attempt == 3:
-                                    text = f"[擷取失敗] {e}"
-                        write_result(ws, row_num, text, self._dest_col)
-                        save(wb, self._filepath)
-            finally:
-                save(wb, self._filepath)
+                        except Exception as e:
+                            if attempt == 3:
+                                text = f"[擷取失敗] {e}"
+                    write_result(ws, row_num, text, self._dest_col)
+                    save(wb, self._filepath)
 
             if self._stop_event.is_set():
                 self._status_cb("已停止")

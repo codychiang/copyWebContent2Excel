@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tempfile
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.utils import column_index_from_string
@@ -9,7 +11,7 @@ from .config import URL_COL, DEST_COL, GRANTED_COL, PUB_COL, JUSTIA_BASE, MAX_CH
 
 
 def load_workbook(filepath: str) -> tuple[Workbook, Worksheet]:
-    wb = openpyxl.load_workbook(filepath)
+    wb = openpyxl.load_workbook(filepath, keep_vba=True)
     return wb, wb.active
 
 
@@ -26,7 +28,7 @@ def load_urls_from_file(
     single_row: bool = False,
     skip_done: bool = True,
 ) -> list[tuple[int, str]]:
-    wb = openpyxl.load_workbook(filepath, data_only=True)
+    wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
     ws = wb.active
     col_idx = column_index_from_string(url_col.upper().strip())
     dest_col_idx = col_idx + 1
@@ -51,6 +53,7 @@ def load_urls_from_file(
         rows.append((i, str(val).strip()))
 
     if url_col_has_data:
+        wb.close()
         return rows
 
     # Fallback: build Justia URLs from K (Granted) / M (Pub) columns
@@ -66,6 +69,7 @@ def load_urls_from_file(
             if not _needs_fetch(dest_val):
                 continue
         rows.append((i, JUSTIA_BASE + patent_num))
+    wb.close()
     return rows
 
 
@@ -75,4 +79,15 @@ def write_result(ws: Worksheet, row_num: int, text: str, dest_col: int = DEST_CO
 
 
 def save(wb: Workbook, filepath: str) -> None:
-    wb.save(filepath)
+    dir_ = os.path.dirname(os.path.abspath(filepath))
+    fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+    try:
+        os.close(fd)
+        wb.save(tmp_path)
+        os.replace(tmp_path, filepath)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
