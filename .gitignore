@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 setting.ini
 chrome_profile/
+doc/
