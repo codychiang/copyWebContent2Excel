@@ -4,3 +4,5 @@ __pycache__/
 setting.ini
 chrome_profile/
 doc/
+build/
+dist/

@@ -1,4 +1,12 @@
+try:
+    import pyi_splash as _splash
+except ImportError:
+    _splash = None
+
 from sub.ui import App
 
 if __name__ == "__main__":
-    App().run()
+    app = App()
+    if _splash:
+        _splash.close()
+    app.run()

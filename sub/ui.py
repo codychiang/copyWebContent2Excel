@@ -5,7 +5,7 @@ import winsound
 from tkinter import filedialog, messagebox, font as tkfont, ttk
 
 from .processor import ExcelProcessor, TxtFolderFiller
-from .session import load_session, save_session
+from .session import load_app_settings, load_session, save_session
 
 # ── Palette ───────────────────────────────────────────────────────
 BG       = "#f0f2f5"   # 頁面背景（淡灰）
@@ -96,8 +96,10 @@ class App:
         self._alert_playing = False
         self._is_crawling = False
         self._is_filling  = False
+        self._alarm_wav = r"C:\Windows\Media\Alarm05.wav"
 
         self._build_ui()
+        self._build_menu()
         self._load_session()
 
     # ── Build ─────────────────────────────────────────────────────
@@ -261,6 +263,54 @@ class App:
         self._text.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=self._text.yview)
 
+    # ── Menu ──────────────────────────────────────────────────────
+    def _build_menu(self):
+        menubar = tk.Menu(self._root)
+
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Exit", command=self._root.destroy)
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        util_menu = tk.Menu(menubar, tearoff=0)
+        util_menu.add_command(label="選擇 Alarm 音檔", command=self._choose_alarm_file)
+        self._topmost_var = tk.BooleanVar(value=False)
+        util_menu.add_checkbutton(label="顯示在上層", variable=self._topmost_var,
+                                  command=self._toggle_topmost)
+        menubar.add_cascade(label="Utility", menu=util_menu)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
+
+        self._root.config(menu=menubar)
+
+    def _choose_alarm_file(self):
+        import os
+        path = filedialog.askopenfilename(
+            title="選擇警報音檔",
+            initialdir=os.path.dirname(self._alarm_wav),
+            initialfile=os.path.basename(self._alarm_wav),
+            filetypes=[("WAV 音檔", "*.wav"), ("所有檔案", "*.*")],
+        )
+        if path:
+            self._alarm_wav = path
+            save_session(
+                self._filepath.get() if self._filepath.get() != "尚未選擇檔案" else "",
+                self._start_row.get(),
+                self._url_col.get(),
+                alarm_wav=path,
+            )
+
+    def _toggle_topmost(self):
+        self._root.attributes("-topmost", self._topmost_var.get())
+
+    def _show_about(self):
+        info = load_app_settings()
+        messagebox.showinfo(
+            "About",
+            f"{info['name']}\n版本：{info['version']}\n作者：{info['author']}\n\n將專利頁面內容擷取並寫入 Excel。",
+        )
+
     # ── Session ───────────────────────────────────────────────────
     def _load_session(self):
         data = load_session()
@@ -272,6 +322,7 @@ class App:
             self._btn_start_single.config(state="normal")
             self._btn_fill.config(state="normal")
         self._url_col.set(data.get("url_col", "AV"))
+        self._alarm_wav = data.get("alarm_wav", self._alarm_wav)
 
     def _choose_file(self):
         path = filedialog.askopenfilename(
@@ -301,7 +352,8 @@ class App:
             return
 
         self._stop_alert()
-        save_session(filepath, self._start_row.get(), self._url_col.get())
+        save_session(filepath, self._start_row.get(), self._url_col.get(),
+                     alarm_wav=self._alarm_wav)
         self._is_crawling = True
         self._set_busy()
         self._set_status("處理中…", ORANGE)
@@ -370,15 +422,13 @@ class App:
             self._status_lbl.config(fg=color)
 
     # ── Alert ─────────────────────────────────────────────────────
-    _ALERT_WAV = r"C:\Windows\Media\Alarm05.wav"
-
     def _preview_alert(self):
-        winsound.PlaySound(self._ALERT_WAV, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        winsound.PlaySound(self._alarm_wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
 
     def _play_alert(self):
         self._alert_playing = True
         winsound.PlaySound(
-            self._ALERT_WAV, winsound.SND_FILENAME | winsound.SND_LOOP | winsound.SND_ASYNC)
+            self._alarm_wav, winsound.SND_FILENAME | winsound.SND_LOOP | winsound.SND_ASYNC)
         self._btn_preview.config(text="停止警報", command=self._stop_alert)
 
     def _stop_alert(self):
@@ -430,4 +480,8 @@ class App:
 
     # ── Run ───────────────────────────────────────────────────────
     def run(self):
+        self._root.attributes("-topmost", True)
+        self._root.lift()
+        self._root.focus_force()
+        self._root.after(300, lambda: self._root.attributes("-topmost", False))
         self._root.mainloop()
