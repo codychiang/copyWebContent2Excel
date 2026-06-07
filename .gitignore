@@ -7,3 +7,4 @@ doc/
 build/
 dist/
 makeInstaller/output
+makeInstaller/defines.nsh
