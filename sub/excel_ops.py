@@ -154,11 +154,12 @@ class ExcelComWriter:
         self._wb.Save()
         dlog("ExcelComWriter.save: 完成")
 
-    def close(self) -> None:
+    def close(self, save: bool = True) -> None:
         try:
-            self._wb.Close(SaveChanges=True)
+            self._excel.DisplayAlerts = False
+            self._wb.Close(SaveChanges=save)
             self._excel.Quit()
-            dlog("ExcelComWriter.close: 完成")
+            dlog(f"ExcelComWriter.close: 完成 save={save}")
         finally:
             del self._ws
             del self._wb
@@ -169,8 +170,8 @@ class ExcelComWriter:
     def __enter__(self):
         return self
 
-    def __exit__(self, *_):
-        self.close()
+    def __exit__(self, exc_type, *_):
+        self.close(save=(exc_type is None))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
