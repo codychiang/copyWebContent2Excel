@@ -12,8 +12,8 @@ from openpyxl.utils import column_index_from_string
 from .config import GRANTED_COL, PUB_COL, JUSTIA_BASE, MAX_CHARS, ROW_HEIGHT
 from .debug import dlog
 
-# XML 1.0 forbids most C0 control characters except \t \n \r
-_INVALID_XML_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# XML 1.0 C0 control chars + non-BMP (surrogate pairs cause BSTR conversion failure)
+_INVALID_XML_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\U00010000-\U0010FFFF]")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -144,7 +144,12 @@ class ExcelComWriter:
         """Write each chunk to consecutive columns; append an empty terminator column."""
         for i, chunk in enumerate(chunks):
             safe = _INVALID_XML_CHARS.sub("", chunk)
-            self._ws.Cells(row_num, start_col + i).Value = safe
+            # Excel 把 = + - @ 開頭的儲存格值當成公式：移除 chunk 開頭的觸發字元
+            if safe and safe[0] in "=+-@":
+                safe = " " + safe
+            cell = self._ws.Cells(row_num, start_col + i)
+            cell.NumberFormat = "@"
+            cell.Value = safe
             self._ws.Rows(row_num).RowHeight = ROW_HEIGHT
             dlog(f"ExcelComWriter.write_chunks: 第{row_num}列 col={start_col+i} {len(safe)}字")
         # empty terminator
@@ -243,7 +248,7 @@ def write_xlsx_from_txts(
             if log_cb:
                 log_cb(f"第{row_num}列 → {len(text)}字 {len(chunks)}格\n")
             if status_cb and i % 10 == 0:
-                status_cb(f"寫入 Excel… {i}/{len(row_txt_pairs)}")
+                status_cb(f"寫入 Excel… {row_num} 列 / {len(row_txt_pairs)}")
 
         writer.save()
 
