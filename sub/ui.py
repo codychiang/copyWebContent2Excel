@@ -5,7 +5,7 @@ import winsound
 from tkinter import filedialog, messagebox, font as tkfont, ttk
 
 from .processor import ExcelProcessor, TxtFolderFiller
-from .session import load_app_settings, load_session, save_session
+from .session import load_app_settings, load_session, load_version, save_session
 
 # ── Palette ───────────────────────────────────────────────────────
 BG       = "#f0f2f5"   # 頁面背景（淡灰）
@@ -70,7 +70,7 @@ def _btn(parent, text, cmd, bg, fg="#ffffff", width=None, state="normal"):
 class App:
     def __init__(self):
         self._root = tk.Tk()
-        self._root.title("Patent Content → Excel")
+        self._root.title(f"Patent Content → Excel  v{load_version()}")
         self._root.configure(bg=BG)
         self._root.resizable(True, True)
         self._root.minsize(740, 580)
@@ -193,6 +193,11 @@ class App:
         self._btn_fill = _btn(
             row2, "填入 Excel", self._fill_excel, bg=BLUE, width=10, state="disabled")
         self._btn_fill.pack(side="left")
+
+        self._btn_fill_single = _btn(
+            row2, "只寫入此列", self._fill_excel_single,
+            bg="#e2e8f0", fg=TEXT, width=10, state="disabled")
+        self._btn_fill_single.pack(side="left", padx=(10, 0))
 
         self._btn_stop_fill = _btn(
             row2, "停止填入", self._stop_fill, bg=RED, width=8, state="disabled")
@@ -321,6 +326,7 @@ class App:
             self._btn_start.config(state="normal")
             self._btn_start_single.config(state="normal")
             self._btn_fill.config(state="normal")
+            self._btn_fill_single.config(state="normal")
         self._url_col.set(data.get("url_col", "AV"))
         self._alarm_wav = data.get("alarm_wav", self._alarm_wav)
 
@@ -336,6 +342,7 @@ class App:
             self._btn_start.config(state="normal")
             self._btn_start_single.config(state="normal")
             self._btn_fill.config(state="normal")
+            self._btn_fill_single.config(state="normal")
             self._set_status("就緒", GREEN)
 
     # ── Actions ───────────────────────────────────────────────────
@@ -377,7 +384,7 @@ class App:
             self._processor.stop()
         self._btn_stop.config(state="disabled")
 
-    def _fill_excel(self):
+    def _fill_excel(self, single_row: bool = False):
         filepath = self._filepath.get()
         if not filepath or filepath == "尚未選擇檔案":
             messagebox.showwarning("提示", "請先選擇 Excel 檔案")
@@ -392,8 +399,14 @@ class App:
             filepath=filepath,
             url_col=self._url_col.get(),
             status_cb=self._on_status,
+            start_row=self._start_row.get(),
+            log_cb=self._on_fill_log,
+            single_row=single_row,
         )
         self._filler.start()
+
+    def _fill_excel_single(self):
+        self._fill_excel(single_row=True)
 
     def _stop_fill(self):
         if self._filler:
@@ -404,6 +417,7 @@ class App:
         self._btn_start.config(state="disabled")
         self._btn_start_single.config(state="disabled")
         self._btn_fill.config(state="disabled")
+        self._btn_fill_single.config(state="disabled")
         self._btn_stop.config(state="normal" if self._is_crawling else "disabled")
         self._btn_stop_fill.config(state="normal" if self._is_filling else "disabled")
 
@@ -413,6 +427,7 @@ class App:
         self._btn_start.config(state=s)
         self._btn_start_single.config(state=s)
         self._btn_fill.config(state=s)
+        self._btn_fill_single.config(state=s)
         self._btn_stop.config(state="disabled")
         self._btn_stop_fill.config(state="disabled")
 
@@ -458,6 +473,17 @@ class App:
             self._text.see("1.0")
         self._root.after(0, _update)
 
+    def _on_fill_log(self, msg: str | None):
+        def _update():
+            self._text.config(state="normal")
+            if msg is None:
+                self._text.delete("1.0", "end")
+            else:
+                self._text.insert("end", msg)
+                self._text.see("end")
+            self._text.config(state="disabled")
+        self._root.after(0, _update)
+
     def _on_progress(self, row_num: int, url: str, current: int, total: int):
         self._root.after(
             0, lambda r=row_num, t=total: self._progress.set(f"正在處理 {r} 列 / {t}"))
@@ -472,9 +498,12 @@ class App:
         def _update():
             self._set_status(msg, color)
             if is_done:
+                was_filling = self._is_filling
                 self._is_crawling = False
                 self._is_filling  = False
                 self._reset_buttons()
+                if "錯誤" in msg and was_filling:
+                    self._play_alert()
 
         self._root.after(0, _update)
 

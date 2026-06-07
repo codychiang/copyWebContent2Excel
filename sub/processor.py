@@ -169,20 +169,30 @@ class TxtFolderFiller(threading.Thread):
         filepath: str,
         url_col: str,
         status_cb: Callable[[str], None],
+        start_row: int = 2,
+        log_cb=None,
+        single_row: bool = False,
     ):
         super().__init__(daemon=True)
         self._filepath    = filepath
         self._url_col_idx = column_index_from_string(url_col.upper().strip())
         self._status_cb   = status_cb
+        self._start_row   = start_row
+        self._log_cb      = log_cb
+        self._single_row  = single_row
         self._stop_event  = threading.Event()
 
     def stop(self) -> None:
         self._stop_event.set()
 
     def run(self) -> None:
-        dlog(f"TxtFolderFiller.run: filepath={self._filepath} url_col_idx={self._url_col_idx}")
+        dlog(f"TxtFolderFiller.run: filepath={self._filepath} url_col_idx={self._url_col_idx} start_row={self._start_row} single_row={self._single_row}")
         try:
             pairs = _scan_txt_folder(self._filepath)
+            if self._single_row:
+                pairs = [(r, p) for r, p in pairs if r == self._start_row]
+            elif self._start_row > 2:
+                pairs = [(r, p) for r, p in pairs if r >= self._start_row]
             if not pairs:
                 self._status_cb("找不到 txt 檔（請先執行擷取）")
                 return
@@ -192,7 +202,10 @@ class TxtFolderFiller(threading.Thread):
                 self._url_col_idx,
                 status_cb=self._status_cb,
                 stop_event=self._stop_event,
+                log_cb=self._log_cb,
             )
         except Exception as e:
             dlog(f"TxtFolderFiller.run: 例外 {type(e).__name__}: {e}")
+            if self._log_cb:
+                self._log_cb(f"錯誤：{e}\n")
             self._status_cb(f"錯誤：{e}")
