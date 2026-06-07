@@ -4,11 +4,25 @@ import os
 import threading
 from typing import Callable
 
+import pywintypes
+import win32file
 from openpyxl.utils import column_index_from_string
 
 from .browser import BrowserSession
 from .debug import dlog
 from .excel_ops import scan_rows_to_process, write_xlsx_from_txts
+
+
+def _lock_xlsx(filepath: str):
+    """持有讀取鎖（不分享 write），阻止 Excel 在擷取中開啟該檔。"""
+    return win32file.CreateFile(
+        filepath,
+        win32file.GENERIC_READ,
+        win32file.FILE_SHARE_READ,  # 不含 FILE_SHARE_WRITE
+        None,
+        win32file.OPEN_EXISTING,
+        0, None,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -60,7 +74,16 @@ class ExcelProcessor(threading.Thread):
         dlog(f"ExcelProcessor.run: 開始 filepath={self._filepath} "
              f"start_row={self._start_row} url_col={self._url_col} "
              f"single_row={self._single_row}")
+        lock_handle = None
         try:
+            try:
+                lock_handle = _lock_xlsx(self._filepath)
+                dlog("ExcelProcessor.run: xlsx 鎖定成功")
+            except pywintypes.error as e:
+                dlog(f"ExcelProcessor.run: 無法鎖定 xlsx：{e}")
+                self._status_cb(f"錯誤：無法鎖定檔案 — {e}")
+                return
+
             if self._single_row and self._start_row == 1:
                 dlog("ExcelProcessor.run: 單列模式 start_row=1，為標題列，結束")
                 self._status_cb("此為標題列")
@@ -80,7 +103,7 @@ class ExcelProcessor(threading.Thread):
                 self._status_cb("沒有需要處理的列")
                 return
 
-            total = len(rows)
+            total = max((r for r, _ in rows), default=0)
             saved = 0
             current = 0
             dlog("ExcelProcessor.run: 啟動 BrowserSession ...")
@@ -137,6 +160,10 @@ class ExcelProcessor(threading.Thread):
         except Exception as e:
             dlog(f"ExcelProcessor.run: 未預期例外 {type(e).__name__}: {e}")
             self._status_cb(f"錯誤：{e}")
+        finally:
+            if lock_handle is not None:
+                win32file.CloseHandle(lock_handle)
+                dlog("ExcelProcessor.run: xlsx 鎖定已釋放")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,11 +215,14 @@ class TxtFolderFiller(threading.Thread):
     def run(self) -> None:
         dlog(f"TxtFolderFiller.run: filepath={self._filepath} url_col_idx={self._url_col_idx} start_row={self._start_row} single_row={self._single_row}")
         try:
-            pairs = _scan_txt_folder(self._filepath)
+            all_pairs = _scan_txt_folder(self._filepath)
+            total_rows = max((r for r, _ in all_pairs), default=0)
             if self._single_row:
-                pairs = [(r, p) for r, p in pairs if r == self._start_row]
+                pairs = [(r, p) for r, p in all_pairs if r == self._start_row]
             elif self._start_row > 2:
-                pairs = [(r, p) for r, p in pairs if r >= self._start_row]
+                pairs = [(r, p) for r, p in all_pairs if r >= self._start_row]
+            else:
+                pairs = all_pairs
             if not pairs:
                 self._status_cb("找不到 txt 檔（請先執行擷取）")
                 return
@@ -203,6 +233,7 @@ class TxtFolderFiller(threading.Thread):
                 status_cb=self._status_cb,
                 stop_event=self._stop_event,
                 log_cb=self._log_cb,
+                total_rows=total_rows,
             )
         except Exception as e:
             dlog(f"TxtFolderFiller.run: 例外 {type(e).__name__}: {e}")

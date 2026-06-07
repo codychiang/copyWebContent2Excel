@@ -378,6 +378,14 @@ class App:
             messagebox.showwarning("提示", "請先選擇 Excel 檔案")
             return
 
+        if _xlsx_is_open(filepath):
+            messagebox.showwarning(
+                "檔案已開啟",
+                "Excel 檔案目前已在 Excel 中開啟。\n"
+                "請先關閉該檔案再執行擷取。"
+            )
+            return
+
         self._stop_alert()
         save_session(filepath, self._start_row.get(), self._url_col.get(),
                      alarm_wav=self._alarm_wav)

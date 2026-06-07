@@ -190,6 +190,7 @@ def write_xlsx_from_txts(
     status_cb=None,
     stop_event=None,
     log_cb=None,
+    total_rows: int = 0,
 ) -> None:
     """Write char count at url_col+3, chunk count at url_col+4, content at url_col+5+."""
     if not row_txt_pairs:
@@ -247,8 +248,12 @@ def write_xlsx_from_txts(
             written += 1
             if log_cb:
                 log_cb(f"第{row_num}列 → {len(text)}字 {len(chunks)}格\n")
+            if written % 5000 == 0:
+                writer.save()
+                dlog(f"write_xlsx_from_txts: 中途存檔（已寫 {written} 列）")
             if status_cb and i % 10 == 0:
-                status_cb(f"寫入 Excel… {row_num} 列 / {len(row_txt_pairs)}")
+                denom = total_rows if total_rows else len(row_txt_pairs)
+                status_cb(f"寫入 Excel… {row_num} 列 / {denom}")
 
         writer.save()
 
