@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 import re
 
@@ -159,6 +160,10 @@ class ExcelComWriter:
             self._excel.Quit()
             dlog("ExcelComWriter.close: 完成")
         finally:
+            del self._ws
+            del self._wb
+            del self._excel
+            gc.collect()
             pythoncom.CoUninitialize()
 
     def __enter__(self):
