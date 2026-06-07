@@ -4,8 +4,28 @@ import tkinter as tk
 import winsound
 from tkinter import filedialog, messagebox, font as tkfont, ttk
 
+import pywintypes
+import win32file
+
 from .processor import ExcelProcessor, TxtFolderFiller
 from .session import load_app_settings, load_session, load_version, save_session
+
+
+def _xlsx_is_open(filepath: str) -> bool:
+    """以獨佔模式嘗試開啟檔案；失敗代表有其他 process（Excel）持有鎖定。"""
+    try:
+        h = win32file.CreateFile(
+            filepath,
+            win32file.GENERIC_WRITE,
+            0,  # FILE_SHARE_NONE
+            None,
+            win32file.OPEN_EXISTING,
+            0, None,
+        )
+        win32file.CloseHandle(h)
+        return False
+    except pywintypes.error:
+        return True
 
 # ── Palette ───────────────────────────────────────────────────────
 BG       = "#f0f2f5"   # 頁面背景（淡灰）
@@ -388,6 +408,14 @@ class App:
         filepath = self._filepath.get()
         if not filepath or filepath == "尚未選擇檔案":
             messagebox.showwarning("提示", "請先選擇 Excel 檔案")
+            return
+
+        if _xlsx_is_open(filepath):
+            messagebox.showwarning(
+                "檔案已開啟",
+                "Excel 檔案目前已在 Excel 中開啟。\n"
+                "請先關閉該檔案再執行寫入，否則結果將無法儲存。"
+            )
             return
 
         self._stop_alert()
