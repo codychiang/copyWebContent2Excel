@@ -6,3 +6,4 @@ chrome_profile/
 doc/
 build/
 dist/
+makeInstaller/output
