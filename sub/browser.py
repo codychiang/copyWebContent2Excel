@@ -41,7 +41,7 @@ class BrowserSession:
         dlog("fetch_text: page loaded，讀取 body text ...")
         text = self._page.inner_text("body")
         dlog(f"fetch_text: body 長度={len(text)}")
-        if len(text) < 500 and "cloudflare" in text.lower():
+        if len(text) == 0 or (len(text) < 500 and "cloudflare" in text.lower()):
             dlog("fetch_text: 偵測到 Cloudflare，等待頁面完整載入 (最長 120s) ...")
             self._page.wait_for_function(
                 "document.body.innerText.length > 500", timeout=120000
