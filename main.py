@@ -3,6 +3,9 @@ try:
 except ImportError:
     _splash = None
 
+from sub.fingerprint import verify
+verify()
+
 from sub.ui import App
 
 if __name__ == "__main__":
